@@ -24,7 +24,7 @@ public class UDPBroadcastConnection {
     var address: sockaddr_in
     
     /// Closure that handles incoming UDP packets.
-    var handler: ((ipAddress: String, port: Int, response: [UInt8]) -> Void)?
+    var handler: ((success: Bool, ipAddress: String, port: Int, response: [UInt8]) -> Void)?
     
     /// A dispatch source for reading data from the UDP socket.
     var responseSource: dispatch_source_t?
@@ -39,7 +39,7 @@ public class UDPBroadcastConnection {
     
     - returns: Returns an initialized UDP broadcast connection.
     */
-    public init(port: UInt16, handler: ((ipAddress: String, port: Int, response: [UInt8]) -> Void)?) {
+    public init(port: UInt16, handler: ((success: Bool, ipAddress: String, port: Int, response: [UInt8]) -> Void)?) {
         self.address = sockaddr_in(
             sin_len:    __uint8_t(sizeof(sockaddr_in)),
             sin_family: sa_family_t(AF_INET),
@@ -126,6 +126,8 @@ public class UDPBroadcastConnection {
             
             guard let endpoint = withUnsafePointer(&socketAddress, { self.getEndpointFromSocketAddress(UnsafePointer($0)) }) else {
                 print("Failed to get the address and port from the socket address received from recvfrom")
+               self.handler?(success: false, ipAddress: "" as String, port: -1, response: [0])
+
                 self.closeConnection()
                 return
             }
@@ -133,7 +135,7 @@ public class UDPBroadcastConnection {
             print("UDP connection received \(bytesRead) bytes from \(endpoint.host):\(endpoint.port)")
             
             // Handle response
-            self.handler?(ipAddress: endpoint.host, port: endpoint.port, response: response)
+            self.handler?(success: true, ipAddress: endpoint.host, port: endpoint.port, response: response)
         }
         
         dispatch_resume(newResponseSource)
@@ -168,6 +170,7 @@ public class UDPBroadcastConnection {
                 if let errorString = String(UTF8String: strerror(errno)) {
                     print("UDP connection failed to send data: \(errorString)")
                 }
+                self.handler?(success: false, ipAddress: "" as String, port: -1, response: [0])
                 closeConnection()
                 return
             }
